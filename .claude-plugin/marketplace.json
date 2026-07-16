@@ -1,0 +1,15 @@
+{
+  "name": "augmentgrowth",
+  "description": "Claude Code skills from Augment Growth's working setup — autonomous GitHub closeout and hygiene.",
+  "owner": {
+    "name": "Augment Growth",
+    "url": "https://github.com/augmentgrowth"
+  },
+  "plugins": [
+    {
+      "name": "public-skill-share",
+      "source": "./",
+      "description": "Autonomous GitHub closeout and hygiene skills from Augment Growth's working setup."
+    }
+  ]
+}
