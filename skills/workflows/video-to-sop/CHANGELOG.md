@@ -3,3 +3,4 @@
 [2026-07-16] Hardened transcript-only routing, managed-venv dependency repair, semantic DOCX round-trip checks, and reference-style documentation/tests after structured review of the live acceptance run.
 [2026-07-16] Split lightweight YouTube-to-Resources Markdown SOPs from client current-state Workflow-SOP Mode so public tutorial requests default to a single low-ceremony artifact.
 [2026-07-17] Added the sanitized, portable public-share release as `video-to-sop`.
+[2026-07-17] Removed machine-specific standing-approval language and added public-repo cache hygiene.

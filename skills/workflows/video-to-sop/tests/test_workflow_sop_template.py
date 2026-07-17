@@ -28,9 +28,9 @@ class WorkflowSopTemplateTests(unittest.TestCase):
         self.assertIn("{Client}", text)
         self.assertIn("{Workflow}", text)
 
-    def test_skill_routes_vision_by_evidence_need_under_standing_approval(self):
+    def test_skill_routes_vision_by_evidence_need_with_explicit_approval(self):
         text = SKILL.read_text(encoding="utf-8")
-        self.assertIn("standing operator approval", text)
+        self.assertIn("explicit approval", text)
         self.assertIn("visual evidence is material", text)
         self.assertIn("only a transcript is supplied", text)
 
