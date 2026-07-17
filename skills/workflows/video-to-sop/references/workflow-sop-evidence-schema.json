@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://second-brain.local/video-to-skill/workflow-sop-evidence-v1.json",
+  "title": "Video-to-Skill Workflow SOP Segment Evidence",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "segment_id",
+    "segment_start_seconds",
+    "segment_end_seconds",
+    "segment_summary",
+    "observations",
+    "open_questions"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "segment_id": {"type": "string", "minLength": 1},
+    "segment_start_seconds": {"type": "number", "minimum": 0},
+    "segment_end_seconds": {"type": "number", "exclusiveMinimum": 0},
+    "segment_summary": {"type": "string"},
+    "observations": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/observation"}
+    },
+    "open_questions": {"type": "array", "items": {"type": "string"}}
+  },
+  "$defs": {
+    "observation": {
+      "type": "object",
+      "required": [
+        "observation_id",
+        "timestamp_seconds",
+        "absolute_timestamp_seconds",
+        "actor",
+        "system",
+        "action",
+        "visible_state",
+        "decision_or_rule",
+        "evidence_type",
+        "evidence_status",
+        "confidence",
+        "source_references",
+        "unknowns"
+      ],
+      "properties": {
+        "observation_id": {"type": "string", "minLength": 1},
+        "timestamp_seconds": {"type": "number", "minimum": 0},
+        "absolute_timestamp_seconds": {"type": "number", "minimum": 0},
+        "actor": {"type": "string"},
+        "system": {"type": "string"},
+        "action": {"type": "string"},
+        "visible_state": {"type": "string"},
+        "decision_or_rule": {"type": "string"},
+        "evidence_type": {"enum": ["video_visible", "spoken", "inferred", "uncertain"]},
+        "evidence_status": {"enum": ["observed", "spoken", "inferred", "uncertain"]},
+        "confidence": {"enum": ["high", "medium", "low"]},
+        "source_references": {"type": "array", "items": {"type": "string"}},
+        "unknowns": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  }
+}
