@@ -1,13 +1,14 @@
 {
   "name": "public-skill-share",
-  "version": "1.0.0",
-  "description": "Augment Growth's shared Claude Code skills: github-autopilot — autonomous GitHub closeout (commit, push, PR, merge, branch hygiene) with a decision-policy layer, optional Stop-hook enforcement, and a daily hygiene watchdog.",
+  "version": "1.1.0",
+  "description": "Augment Growth's shared Claude Code skills: autonomous GitHub closeout and video-to-SOP workflow extraction.",
   "author": {
     "name": "Augment Growth",
     "url": "https://github.com/augmentgrowth"
   },
   "license": "MIT",
   "skills": [
-    "./skills/engineering/github-autopilot"
+    "./skills/engineering/github-autopilot",
+    "./skills/workflows/video-to-sop"
   ]
 }

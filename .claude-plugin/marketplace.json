@@ -1,6 +1,6 @@
 {
   "name": "augmentgrowth",
-  "description": "Claude Code skills from Augment Growth's working setup — autonomous GitHub closeout and hygiene.",
+  "description": "Claude Code skills from Augment Growth's working setup — GitHub closeout, hygiene, and video-to-SOP workflow extraction.",
   "owner": {
     "name": "Augment Growth",
     "url": "https://github.com/augmentgrowth"
@@ -9,7 +9,7 @@
     {
       "name": "public-skill-share",
       "source": "./",
-      "description": "Autonomous GitHub closeout and hygiene skills from Augment Growth's working setup."
+      "description": "Autonomous GitHub closeout, hygiene, and video-to-SOP workflow skills from Augment Growth's working setup."
     }
   ]
 }

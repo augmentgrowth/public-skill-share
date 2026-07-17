@@ -39,11 +39,16 @@ The fix is the same in every case: **codify the default, enforce it mechanically
 
 - [github-autopilot](skills/engineering/github-autopilot/SKILL.md) — owns GitHub closeout end-to-end, unprompted: commit → push → PR → CI green → review resolved → merged → branch deleted → hygiene sweep. Ships with a decision-policy table (act on codified defaults instead of asking option-menu questions), an optional Stop hook that blocks turn-end while work is unshipped, and an optional daily three-tier hygiene watchdog (deterministic bash → cheap model → strong model on escalation). [Full README](skills/engineering/github-autopilot/README.md).
 
+**Model-invoked** — Claude loads these when the task matches:
+
+- [video-to-sop](skills/workflows/video-to-sop/SKILL.md) — extracts structured SOPs from YouTube videos, local recordings, or transcripts, with optional Gemini vision and a resumable workflow-evidence path.
+
 ## Layout
 
 ```
 skills/
   engineering/   # promoted: daily engineering workflow skills
+  workflows/     # promoted: process and documentation skills
 ```
 
 Promoted skills appear in this README and in the plugin manifest. Draft and personal skills stay out of both until they've survived real use.
