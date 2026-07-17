@@ -85,7 +85,7 @@ python3 "SKILL_DIR/scripts/workflow_sop.py" compile --run-dir "/path/to/output/w
 
 **Privacy and provider boundary:** the packet records data classification and local source hashes. Gemini is the primary provider for large local video; provider selection is explicit and there is no automatic OpenRouter fallback. Raw clips/responses stay in local, ignored packet directories. Workflow-SOP Mode does not upload to Google Drive, create a native Google Doc, or execute a client workflow.
 
-**Vision routing and standing operator approval:** this installation has standing operator approval to use Gemini vision when visual evidence is material to reconstructing the workflow. If only a transcript is supplied, or the visible screen state is not important to the requested SOP, use the transcript-only path. When necessary video is referenced but not local, first try the named link, configured connector, or available local tooling before asking the operator to download it. The `--provider-approved` flag remains a fail-closed execution boundary; the standing approval satisfies that boundary unless a new data-handling constraint or provider change requires fresh approval.
+**Vision routing and approval:** use Gemini vision only when visual evidence is material to reconstructing the workflow. If only a transcript is supplied, or the visible screen state is not important to the requested SOP, use the transcript-only path. For confidential recordings, tell the user that the selected clips will be uploaded to Gemini and obtain explicit approval before running extraction. When necessary video is referenced but not local, first try the named link, configured connector, or available local tooling before asking the operator to download it. The `--provider-approved` flag remains a fail-closed execution boundary; approval must be obtained for each applicable run.
 
 ### Multiple workstreams in one recording
 
@@ -129,7 +129,7 @@ If a supplied transcript or meeting-note file is the only source, select the dir
 
 If the user has already stated an extraction or output preference (e.g., "transcript only", "skip vision", "make me a skill from this"), honor it and skip the corresponding AskUserQuestion below.
 
-If the evidence need is genuinely ambiguous and no standing approval or preference resolves it, use AskUserQuestion to confirm **extraction mode**:
+If the evidence need is genuinely ambiguous and no explicit user preference resolves it, use AskUserQuestion to confirm **extraction mode**:
 > How should I extract this video?
 > 1. **Full Gemini vision** — Reads the video file directly. Catches on-screen prompts, UI flows, visual demos. Slower, costs Gemini API credit. Best for tutorials where the visual content matters.
 > 2. **Transcript-only** — yt-dlp pulls captions + video description, then synthesizes. Faster, no API cost. Best for podcast-style/talking-head videos where speech is the primary signal, or when Gemini is unavailable.
