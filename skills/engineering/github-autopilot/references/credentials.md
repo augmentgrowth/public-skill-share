@@ -28,7 +28,7 @@ The exact account name must come from `gh auth status`; never guess from memory.
 ## Check and Switch
 
 ```bash
-REMOTE_OWNER=$(git remote get-url origin 2>/dev/null | sed -E 's#.*[:/]([^/]+)/[^/]+(\\.git)?$#\\1#')
+REMOTE_OWNER=$(git remote get-url origin 2>/dev/null | sed -E 's#\.git$##; s#.*[:/]([^/]+)/[^/]+$#\1#')
 gh auth status 2>&1
 ```
 

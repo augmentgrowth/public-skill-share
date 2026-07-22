@@ -64,9 +64,21 @@ def truthy(value):
 
 
 def default_branch(top):
+    # Explicit override wins (repos with trunk/other defaults and no origin/HEAD):
+    #   git config --local githubAutopilot.defaultBranch trunk
+    rc, cfg = sh(["git", "config", "--get", "githubAutopilot.defaultBranch"], top)
+    if rc == 0 and cfg.strip():
+        return cfg.strip()
     rc, ref = sh(["git", "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"], top)
     if rc == 0 and ref.startswith("origin/"):
         return ref[len("origin/"):]
+    # No origin/HEAD (local-only repo, or never fetched): first existing
+    # conventional default. show-ref pins to branches (a same-named tag
+    # would satisfy plain rev-parse).
+    for cand in ("main", "master", "develop"):
+        rc, _ = sh(["git", "show-ref", "--verify", "--quiet", f"refs/heads/{cand}"], top)
+        if rc == 0:
+            return cand
     return "main"
 
 
@@ -117,7 +129,15 @@ def main():
             if rc == 0 and ahead and ahead != "0":
                 issues.append(f"{ahead} unpushed commit(s) on '{branch or 'DETACHED'}'")
             elif rc != 0 and branch and branch not in ("main", "master", default):
-                issues.append(f"branch '{branch}' has no upstream (work not on any remote)")
+                # An empty branch (no commits beyond default) is not stranded
+                # work — scratch/worktree branches trip this constantly.
+                rc2, ahead_def = sh(
+                    ["git", "rev-list", "--count", f"{default}..HEAD"], top
+                )
+                if rc2 != 0 or (ahead_def and ahead_def != "0"):
+                    issues.append(
+                        f"branch '{branch}' has no upstream (work not on any remote)"
+                    )
 
     if not issues:
         return

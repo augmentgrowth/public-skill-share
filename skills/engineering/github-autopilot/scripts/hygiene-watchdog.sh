@@ -129,7 +129,16 @@ while IFS= read -r repo; do
   # Tier 0c: collect judgment-needing findings for the agent tiers
   gone=$(git -C "$repo" branch -vv 2>/dev/null | grep '\[gone\]' | sed 's/^[* +]*//' | awk '{print $1}')
   for b in $gone; do
-    find_note "- \`$repo\`: branch \`$b\` upstream GONE and not contained in $default — verify contents, then delete or push"
+    # Squash-merge check: ancestry says unmerged, but if merging the branch
+    # into default changes nothing (tree oid identical), its content already
+    # landed — a false alarm that would otherwise re-escalate daily.
+    mt=$(git -C "$repo" merge-tree --write-tree "$default" "$b" 2>/dev/null | head -1)
+    dt=$(git -C "$repo" rev-parse "$default^{tree}" 2>/dev/null)
+    if [ -n "$mt" ] && [ "$mt" = "$dt" ]; then
+      find_note "- \`$repo\`: branch \`$b\` upstream GONE but content-contained in $default (squash-merged) — tag \`autopilot/trash/$(date +%Y%m%d)/$b\` then delete"
+    else
+      find_note "- \`$repo\`: branch \`$b\` upstream GONE and not contained in $default — verify contents, then delete or push"
+    fi
   done
   while IFS= read -r line; do
     b=$(echo "$line" | sed 's/^[* +]*//' | awk '{print $1}')
@@ -150,7 +159,70 @@ while IFS= read -r repo; do
     find_note "- \`$repo\`: $dirty dirty file(s) (report-only — watchdog never commits user work)"
   fi
   [ "$RO" -eq 1 ] && [ "$dirty" -gt 0 ] && find_note "  (report-only repo: no mutations permitted)"
+
+  # Track every checkout (repo + its worktrees) for stale-WIP aging.
+  # Line-preserving read: worktree paths may contain spaces.
+  git -C "$repo" worktree list --porcelain 2>/dev/null | sed -n 's/^worktree //p' | \
+    while IFS= read -r co; do [ -d "$co" ] && echo "$co" >> "$WORKDIR/checkouts.txt"; done
 done < "$REPOS"
+
+# --- Stale-WIP aging: dirty checkouts whose content stopped changing get escalated.
+# Fingerprint = status + unstaged diff + staged diff + untracked content (size-guarded);
+# mtime alone is unreliable. A checkout escalates only after its fingerprint is
+# unchanged for >= WIP_STALE_DAYS (default 3). Requires jq; skipped without it.
+# Nothing is ever auto-committed or discarded — the escalation is a decision prompt.
+WIP_STATE="${WIP_STATE:-$HOME/.local/state/github-autopilot/wip-state.json}"
+WIP_STALE_DAYS="${WIP_STALE_DAYS:-3}"
+if command -v jq >/dev/null 2>&1; then
+  mkdir -p "$(dirname "$WIP_STATE")"
+  [ -f "$WIP_STATE" ] || echo '{}' > "$WIP_STATE"
+  NOW=$(date +%s)
+  NEW_STATE="$WORKDIR/wip-state.json"; cp "$WIP_STATE" "$NEW_STATE"
+  if [ -s "$WORKDIR/checkouts.txt" ]; then
+    sort -u "$WORKDIR/checkouts.txt" | while IFS= read -r co; do
+      st=$(git -C "$co" status --porcelain 2>/dev/null)
+      if [ -z "$st" ]; then
+        jq --arg p "$co" 'del(.[$p])' "$NEW_STATE" > "$NEW_STATE.tmp" && mv "$NEW_STATE.tmp" "$NEW_STATE"
+        continue
+      fi
+      fpfile="$WORKDIR/fp.tmp"
+      { echo "$st"; git -C "$co" diff 2>/dev/null; git -C "$co" diff --cached 2>/dev/null; \
+        git -C "$co" ls-files --others --exclude-standard -z 2>/dev/null | \
+        while IFS= read -r -d '' f; do
+          sz=$(stat -f%z "$co/$f" 2>/dev/null || stat -c%s "$co/$f" 2>/dev/null || echo 0)
+          if [ "$sz" -le 5242880 ]; then
+            h=$(git hash-object -- "$co/$f" 2>/dev/null)
+            [ -n "$h" ] && printf '%s %s\n' "$h" "$f" || echo "HASHFAIL:$f"
+          else echo "big:$f:$sz"; fi
+        done; } > "$fpfile"
+      # Any constituent hash failure poisons the fingerprint — skip aging entirely
+      # rather than risk two failure states comparing equal.
+      grep -q '^HASHFAIL:' "$fpfile" && continue
+      fp=$(git hash-object --stdin < "$fpfile" 2>/dev/null)
+      [ -z "$fp" ] && continue   # hashing failed — never age on an empty fingerprint
+      prev_fp=$(jq -r --arg p "$co" '.[$p].fingerprint // ""' "$NEW_STATE")
+      first=$(jq -r --arg p "$co" '.[$p].first_seen // 0' "$NEW_STATE")
+      changed=$(jq -r --arg p "$co" '.[$p].last_changed // 0' "$NEW_STATE")
+      if [ "$fp" != "$prev_fp" ]; then
+        [ "$first" = "0" ] && first=$NOW
+        jq --arg p "$co" --arg f "$fp" --argjson n "$NOW" --argjson fs "$first" \
+          '.[$p]={fingerprint:$f,first_seen:$fs,last_changed:$n}' "$NEW_STATE" > "$NEW_STATE.tmp" && mv "$NEW_STATE.tmp" "$NEW_STATE"
+      else
+        age_days=$(( (NOW - changed) / 86400 ))
+        if [ "$age_days" -ge "$WIP_STALE_DAYS" ]; then
+          echo "STALE-WIP[fp:${fp:0:12}]: \`$co\` — uncommitted work unchanged for ${age_days} day(s). Decide: finish it, commit it to a WIP branch, or discard. Never auto-commit or discard$( is_report_only "$co" && echo '; report-only repo')." >> "$WORKDIR/stale-wip.txt"
+        fi
+      fi
+    done
+  fi
+  [ -s "$WORKDIR/stale-wip.txt" ] && { echo "" >> "$FINDINGS"; echo "Stale WIP (fingerprint unchanged >= ${WIP_STALE_DAYS}d):" >> "$FINDINGS"; cat "$WORKDIR/stale-wip.txt" >> "$FINDINGS"; }
+  # Atomic, validated state replace — a half-written state file would disable aging.
+  if [ "$DRY_RUN" -eq 0 ] && jq empty "$NEW_STATE" 2>/dev/null; then
+    cp "$NEW_STATE" "$WIP_STATE.tmp" && mv "$WIP_STATE.tmp" "$WIP_STATE"
+  fi
+else
+  log "stale-WIP aging skipped (jq not installed)"
+fi
 
 # --- Tier 1: cheap model ---
 ESCALATIONS="$WORKDIR/escalations.txt"; : > "$ESCALATIONS"
@@ -163,9 +235,17 @@ $(cat "$FINDINGS")
 Do ONLY bounded, obviously-safe cleanup: push stranded/ahead branches to origin with -u (same name); delete remote branches whose commits are verifiably contained in the default branch and have no open PR; delete gone-upstream local branches after containment verification. NEVER: force-push, delete unmerged work, touch backup/archive/rescue branches, commit dirty files, or mutate report-only (client) repos.
 
 For anything needing real judgment — parked-branch integration, unmerged-and-gone branches, duplicate PRs, conflicts, ambiguous authority — do NOT attempt it; instead output a line starting exactly with 'ESCALATE: ' describing it. End with a short summary of actions taken."
-  T1_OUT=$(cd "$HOME" && timeout 900 claude -p --model "$TIER1_MODEL" "$T1_PROMPT" 2>>"$WORKDIR/t1.err") || log "Tier 1 run failed (see t1.err)"
-  echo "$T1_OUT" | grep '^ESCALATE: ' > "$ESCALATIONS" || true
-  echo "$T1_OUT" > "$WORKDIR/t1.out"
+  T1_OUT=$(cd "$HOME" && timeout 900 claude -p --model "$TIER1_MODEL" "$T1_PROMPT" 2>>"$WORKDIR/t1.err"); T1_STATUS=$?
+  # claude -p can print auth failures to STDOUT and exit 0.
+  case "$T1_OUT" in *"Failed to authenticate"*) T1_STATUS=1 ;; esac
+  if [ "$T1_STATUS" -ne 0 ]; then
+    log "Tier 1 run failed (status $T1_STATUS, see t1.err)"
+    printf '%s' "$T1_OUT" >> "$WORKDIR/t1.err"   # partial/errant stdout is evidence, not results
+    : > "$WORKDIR/t1.out"                        # empty = failed; -s checks depend on this
+  else
+    printf '%s' "$T1_OUT" > "$WORKDIR/t1.out"
+    printf '%s\n' "$T1_OUT" | grep '^ESCALATE: ' > "$ESCALATIONS" || true
+  fi
 fi
 
 # --- Tier 2: strong model (only on escalation) ---
@@ -176,13 +256,23 @@ if [ -s "$ESCALATIONS" ] && [ "$DRY_RUN" -eq 0 ]; then
 $(cat "$ESCALATIONS")
 
 Handle them with full judgment: selective integration of parked agent branches (work in a temporary worktree, never move a checkout the automation depends on off its default branch), duplicate-PR disposition, unmerged-and-gone triage. Hard limits unchanged: no force-push, no unmerged deletion, no backup/archive/rescue deletion, report-only (client) repos untouched, no user-dirty-file commits. If a case still needs the human (product decision, missing credentials), say so explicitly in your summary. End with a summary of what you did and anything left for the human."
-  T2_OUT=$(cd "$HOME" && timeout 2400 claude -p --model "$TIER2_MODEL" "$T2_PROMPT" 2>>"$WORKDIR/t2.err") || log "Tier 2 run failed (see t2.err)"
-  echo "$T2_OUT" > "$WORKDIR/t2.out"
+  T2_OUT=$(cd "$HOME" && timeout 2400 claude -p --model "$TIER2_MODEL" "$T2_PROMPT" 2>>"$WORKDIR/t2.err"); T2_STATUS=$?
+  case "$T2_OUT" in *"Failed to authenticate"*) T2_STATUS=1 ;; esac
+  if [ "$T2_STATUS" -ne 0 ]; then
+    log "Tier 2 run failed (status $T2_STATUS, see t2.err)"
+    printf '%s' "$T2_OUT" >> "$WORKDIR/t2.err"
+    : > "$WORKDIR/t2.out"
+  else
+    printf '%s' "$T2_OUT" > "$WORKDIR/t2.out"
+  fi
 fi
 
 # --- report (only when something happened) ---
 if [ -s "$ACTIONS" ] || [ -s "$FINDINGS" ]; then
   mkdir -p "$REPORT_DIR"
+  REPORT_OUT="$REPORT_DIR/$STAMP.md"
+  # A dry run must never clobber a real report.
+  [ "$DRY_RUN" -eq 1 ] && REPORT_OUT="$REPORT_DIR/$STAMP.dry-run.md"
   {
     echo "# Git hygiene watchdog — $STAMP"
     echo
@@ -190,8 +280,19 @@ if [ -s "$ACTIONS" ] || [ -s "$FINDINGS" ]; then
     if [ -s "$WORKDIR/t1.out" ]; then echo "## Tier 1 ($TIER1_MODEL)"; cat "$WORKDIR/t1.out"; echo; fi
     if [ -s "$WORKDIR/t2.out" ]; then echo "## Tier 2 ($TIER2_MODEL)"; cat "$WORKDIR/t2.out"; echo; fi
     if [ ! -s "$WORKDIR/t1.out" ] && [ -s "$FINDINGS" ]; then echo "## Findings (unprocessed$( [ "$DRY_RUN" -eq 1 ] && echo ', dry run'))"; cat "$FINDINGS"; fi
-  } > "$REPORT_DIR/$STAMP.md"
-  log "report: $REPORT_DIR/$STAMP.md"
+    # Preserve tier failure causes — t1.err/t2.err die with WORKDIR otherwise.
+    for tier in t1 t2; do
+      if [ -s "$WORKDIR/$tier.err" ] && [ ! -s "$WORKDIR/$tier.out" ]; then
+        echo "## ${tier} FAILURE (stderr)"; tail -20 "$WORKDIR/$tier.err"; echo
+      fi
+    done
+  } > "$REPORT_OUT"
+  log "report: $REPORT_OUT"
+  # Rolling plain-English ledger: one line per deterministic action, one file
+  # across all days (daily reports remain the detailed record).
+  if [ -s "$ACTIONS" ] && [ "$DRY_RUN" -eq 0 ]; then
+    sed "s/^- /[$STAMP] watchdog: /" "$ACTIONS" >> "$REPORT_DIR/LEDGER.md"
+  fi
 else
   log "clean sweep — nothing to do, no report written"
 fi
@@ -205,8 +306,11 @@ fi
 # tracker or notifier.
 LEFTOVERS="$WORKDIR/leftovers.md"; : > "$LEFTOVERS"
 if [ "$DRY_RUN" -eq 0 ]; then
+  # Stale WIP always reaches the escalation hook — it is the one dirty-file
+  # class the Stop hook can never see (the owning session never ended a turn).
+  [ -s "$WORKDIR/stale-wip.txt" ] && cat "$WORKDIR/stale-wip.txt" >> "$LEFTOVERS"
   [ -s "$ESCALATIONS" ] && [ ! -s "$WORKDIR/t2.out" ] && cat "$ESCALATIONS" >> "$LEFTOVERS"
-  [ -s "$FINDINGS" ] && [ ! -s "$WORKDIR/t1.out" ] && { echo "Tier 1 never ran/failed; unprocessed findings:"; cat "$FINDINGS"; } >> "$LEFTOVERS"
+  [ -s "$FINDINGS" ] && [ ! -s "$WORKDIR/t1.out" ] && { echo "Tier 1 never ran/failed; unprocessed findings:"; cat "$FINDINGS"; echo "Tier 1 stderr (cause):"; tail -10 "$WORKDIR/t1.err" 2>/dev/null; } >> "$LEFTOVERS"
   for f in t1.out t2.out; do
     [ -s "$WORKDIR/$f" ] && grep -iE "left for the human|blocker|needs (the )?human|missing credential|product decision" "$WORKDIR/$f" >> "$LEFTOVERS" || true
   done

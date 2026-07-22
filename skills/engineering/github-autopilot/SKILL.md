@@ -1,6 +1,6 @@
 ---
 name: github-autopilot
-version: 1.0.0
+version: 1.1.0
 description: Own GitHub closeout end-to-end — commit, push, PR, merge, branch/worktree cleanup, CI, review feedback, and credential routing. Invoke UNPROMPTED at the end of any session that changed files in a git repo; also on any commit/push/PR/merge/cleanup request.
 triggers:
   - own this PR
@@ -32,6 +32,7 @@ Enforcement (optional): a Stop hook (`scripts/stop-closeout-guard.py`) can block
 - Operational judgment calls (auto-sync-swept edits, orphaned branches, duplicate PRs, scope pollution) follow `references/decision-policy.md`: act on the codified default and report, don't present option menus. Ask only for the genuine stops listed there.
 - Every closeout ends with the hygiene sweep in `references/branch-hygiene.md` (prune `[gone]`/merged branches and prunable worktrees; drain any parked-branch queue a repo profile defines).
 - Preserve unrelated dirty work. Stage only files that belong to the current task.
+- In long autonomous sessions, commit at logical checkpoints (a feature lands, tests go green, a refactor completes) — not one giant commit at closeout. A session crossing hours of work with zero commits is losing recovery points.
 - Resolve conflicts and CI failures directly when local evidence, PR context, and tests make the fix bounded.
 - Optional engine layer — if you use the compound-engineering plugin, its skills slot in here (skip these lines otherwise):
   - `compound-engineering:ce-commit-push-pr` for commit, push, and PR creation/update.
@@ -94,3 +95,10 @@ When stopped, include the repo path, branch, intended action, blocker, and the e
 7. Run the closeout hygiene sweep (`references/branch-hygiene.md`): prune `[gone]`/merged branches and dead worktrees; in auto-synced repos, drain any parked-branch queue the profile defines.
 8. Switch back to the default GitHub identity if it was switched.
 9. Report the full ledger — committed, pushed, PR, CI, merged or why not, branches/worktrees cleaned, identity used, judgment calls made per `decision-policy.md`, and any blockers. The report must preempt "was everything pushed and merged?"
+
+## Gotchas
+
+- **Squash merges blind ancestry checks.** `git branch --merged` and `git cherry` report fully-landed branches as unmerged when the PR was squash-merged. Always prove containment via the ladder in `references/branch-hygiene.md` — ancestry, then merged-PR `headRefOid` evidence, then `git merge-tree` content equivalence — before deleting or reporting "unmerged work".
+- **A no-upstream branch with zero commits ahead of default is not stranded work.** Scratch and worktree branches trip "no upstream" constantly; check `git rev-list --count <default>..HEAD` before flagging or pushing.
+- **Enforcement layers are harness-specific.** The Stop hook fires only in Claude Code; other harnesses reach this skill via their own routing (e.g. AGENTS.md) and nothing blocks their turn-end with dirty state. The daily watchdog is the cross-harness backstop.
+- **Copy-pasted shell in references must be executed-verified.** A double-escaped sed in an earlier version of credentials.md output literal `\1` for every remote; any snippet a weaker model will run verbatim gets tested at edit time.
