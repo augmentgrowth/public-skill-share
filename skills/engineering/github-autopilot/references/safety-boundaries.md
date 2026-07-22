@@ -41,7 +41,7 @@ Stage only current-task files. Report user work and unsafe files as preserved, n
 
 Allowed without asking:
 
-- Delete any local or remote branch whose commits are verifiably contained in the default branch (merged/`[gone]`-and-contained), regardless of who created it, when it is not protected/default and has no open PR. Containment is the safety property, not authorship.
+- Delete any local or remote branch verifiably contained in the default branch — proven via the Containment Verification ladder in `branch-hygiene.md` (ancestry, merged PR, or merge-tree content equivalence; ancestry checks alone miss squash merges) — regardless of who created it, when it is not protected/default and has no open PR. Containment is the safety property, not authorship. Content-proven (non-ancestry) deletions require the local `autopilot/trash/<date>/<branch>` recovery tag first.
 - Prune worktrees git marks `prunable` when they carry no dirty files.
 - Merge a PR that satisfies the Merge Policy in `pr-owner.md`.
 - Abort a local merge/rebase only when no resolution has been made and the operation was started by this workflow.
