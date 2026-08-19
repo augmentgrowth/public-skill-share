@@ -114,19 +114,32 @@ path — the sweep inspects them every run and changes nothing.
    `prunable` — so a merged branch held by a worktree is debt with no escape path. For each
    worktree other than the primary checkout, **complete the whole disposal here** (steps 2-4
    have already run; do not defer back to them):
-   1. **Check liveness first — clean is not idle.** A worktree belonging to a session that is
-      still running looks exactly like an abandoned one: no dirty files, branch already
-      merged, nothing obviously in flight. It is simply between edits. Removing it yanks the
-      workspace out from under live work. Before anything else, check when the worktree
-      directory was last modified; if that is within the last hour, **skip it entirely and
-      report it as an active session's workspace.** Do not proceed to containment — a
-      recently-touched worktree is out of scope no matter how disposable it looks.
+   1. **Check liveness first — clean is not idle, and the window is deliberately wide.**
+      A worktree belonging to a running session looks exactly like an abandoned one: no
+      dirty files, branch possibly already merged, nothing in flight. It is simply between
+      edits. Skip, and report as an active workspace, when **any** of these holds:
 
-      Harness-managed roots (`.claude/worktrees/`, `.codex/worktrees/`, and equivalents)
-      hold session workspaces the harness creates and is expected to reap. They are still
-      disposable once genuinely stale, contained, and clean — a blanket exemption just
-      recreates the never-disposed debt this sweep exists to prevent — but never
-      force-remove one, and prefer reporting over removing when the age is borderline.
+      - A running process has its working directory inside the worktree (on macOS/Linux,
+        `lsof -a -d cwd +D <path>`). This is the only strong signal; when it is available
+        and positive, skip regardless of age.
+      - The worktree directory was modified in the **last 7 days**.
+      - It sits under a harness-managed session root (`.claude/worktrees/`,
+        `.codex/worktrees/`, or equivalent) and was modified in the **last 30 days**.
+
+      **Do not tighten these windows.** The costs are wildly asymmetric: removing a live
+      session's workspace breaks running work and is disruptive to recover from, while
+      leaving a dead worktree one extra cycle costs nothing — the next sweep gets it.
+      Modification time is a *weak* proxy for liveness: a session parked through a meeting,
+      a long-running task, or a day of work in a parallel session is untouched but very much
+      alive, and people routinely keep several sessions open for days. The windows above are
+      sized for that reality, and they still catch real debt — the orphans that motivated
+      this rule had been idle 27 to 70 days, so nothing tighter was ever buying anything.
+
+      Harness-managed roots hold session workspaces the harness creates and is expected to
+      reap. They remain disposable once genuinely stale, contained, and clean — a blanket
+      exemption just recreates the never-disposed debt this sweep exists to prevent — but
+      never force-remove one, and when the age is anywhere near the boundary, report instead
+      of removing.
    2. Establish containment for its branch via the ladder above. A detached-HEAD worktree is
       contained when its HEAD commit is reachable from default.
    3. Not contained → leave the worktree alone and report it as active work. Stop.
