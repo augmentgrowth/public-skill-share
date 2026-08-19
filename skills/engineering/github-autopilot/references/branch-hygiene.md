@@ -52,8 +52,11 @@ worktree-dirt and stale-PR rules ask. Those require a look at the current tree, 
 
 For deletions proven by level 2 or 3 (content, not ancestry), first drop a local recovery tag:
 `git tag autopilot/trash/$(date +%Y%m%d)/<branch> <branch>`. Never push these tags; prune tags
-older than 30 days during the hygiene sweep. The reflog is only a fallback (unreachable
-entries can expire in ~30 days) — the tag is the guarantee.
+older than 90 days during the hygiene sweep. The reflog is only a fallback (unreachable
+entries can expire in ~30 days) — the tag is the guarantee, and 90 days is chosen to
+outlive the reflog by a wide margin rather than expire alongside it. These are local refs
+of a few dozen bytes covering the riskier deletion class (content-proven, not ancestry),
+so a long window is close to free.
 
 ## Rules
 
@@ -122,7 +125,7 @@ path — the sweep inspects them every run and changes nothing.
       removing it is the whole disposal. Remove the now-empty worktree directory too if the
       tool leaves one behind.
 6. `git worktree prune`; remove worktrees git marks `prunable` when they have no dirty files.
-   Prune `autopilot/trash/*` tags older than 30 days.
+   Prune `autopilot/trash/*` tags older than 90 days.
 7. In repos with an automated sync process, drain the parked agent-branch queue the repo profile defines.
 8. **Dispose of timestamped `backup/*`, `archive/*`, `rescue/*` branches** via the ladder in
    *Disposing of preservation branches* below. These are not exempt from disposal — they are

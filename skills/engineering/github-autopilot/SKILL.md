@@ -1,6 +1,6 @@
 ---
 name: github-autopilot
-version: 1.2.0
+version: 1.2.1
 description: Own GitHub closeout end-to-end — commit, push, PR, merge, branch/worktree cleanup, CI, review feedback, and credential routing. Invoke UNPROMPTED at the end of any session that changed files in a git repo; also on any commit/push/PR/merge/cleanup request.
 triggers:
   - own this PR
