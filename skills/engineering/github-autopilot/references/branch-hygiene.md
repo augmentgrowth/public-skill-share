@@ -114,12 +114,25 @@ path — the sweep inspects them every run and changes nothing.
    `prunable` — so a merged branch held by a worktree is debt with no escape path. For each
    worktree other than the primary checkout, **complete the whole disposal here** (steps 2-4
    have already run; do not defer back to them):
-   1. Establish containment for its branch via the ladder above. A detached-HEAD worktree is
+   1. **Check liveness first — clean is not idle.** A worktree belonging to a session that is
+      still running looks exactly like an abandoned one: no dirty files, branch already
+      merged, nothing obviously in flight. It is simply between edits. Removing it yanks the
+      workspace out from under live work. Before anything else, check when the worktree
+      directory was last modified; if that is within the last hour, **skip it entirely and
+      report it as an active session's workspace.** Do not proceed to containment — a
+      recently-touched worktree is out of scope no matter how disposable it looks.
+
+      Harness-managed roots (`.claude/worktrees/`, `.codex/worktrees/`, and equivalents)
+      hold session workspaces the harness creates and is expected to reap. They are still
+      disposable once genuinely stale, contained, and clean — a blanket exemption just
+      recreates the never-disposed debt this sweep exists to prevent — but never
+      force-remove one, and prefer reporting over removing when the age is borderline.
+   2. Establish containment for its branch via the ladder above. A detached-HEAD worktree is
       contained when its HEAD commit is reachable from default.
-   2. Not contained → leave the worktree alone and report it as active work. Stop.
-   3. Contained and dirty → adjudicate every dirty path per *Adjudicating worktree dirt*
+   3. Not contained → leave the worktree alone and report it as active work. Stop.
+   4. Contained and dirty → adjudicate every dirty path per *Adjudicating worktree dirt*
       before touching the worktree.
-   4. Remove the worktree, then delete its branch (local and remote) in that order.
+   5. Remove the worktree, then delete its branch (local and remote) in that order.
       **Worktree removal precedes branch deletion** — the reverse order simply fails with
       `branch is checked out at <path>`. A detached-HEAD worktree has no branch to delete:
       removing it is the whole disposal. Remove the now-empty worktree directory too if the
