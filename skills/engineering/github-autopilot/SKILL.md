@@ -1,6 +1,6 @@
 ---
 name: github-autopilot
-version: 1.1.0
+version: 1.2.0
 description: Own GitHub closeout end-to-end — commit, push, PR, merge, branch/worktree cleanup, CI, review feedback, and credential routing. Invoke UNPROMPTED at the end of any session that changed files in a git repo; also on any commit/push/PR/merge/cleanup request.
 triggers:
   - own this PR
@@ -30,7 +30,7 @@ Enforcement (optional): a Stop hook (`scripts/stop-closeout-guard.py`) can block
 - Treat GitHub closeout as part of the session when files changed, a PR exists, CI is red, review feedback is pending, a merge/rebase is in progress, or the user asks to ship/push. Run it UNPROMPTED — a bare "commit", "push", or "merge" from the user means closeout failed to self-start. The user should never be the trigger.
 - Closeout is end-to-end: commit → push → PR → CI green → review resolved → **merged** → head branch deleted → hygiene sweep. A green PR left unmerged is unfinished work unless a stop condition or profile gate applies (see `references/pr-owner.md` Merge Policy).
 - Operational judgment calls (auto-sync-swept edits, orphaned branches, duplicate PRs, scope pollution) follow `references/decision-policy.md`: act on the codified default and report, don't present option menus. Ask only for the genuine stops listed there.
-- Every closeout ends with the hygiene sweep in `references/branch-hygiene.md` (prune `[gone]`/merged branches and prunable worktrees; drain any parked-branch queue a repo profile defines).
+- Every closeout ends with the hygiene sweep in `references/branch-hygiene.md`. The sweep **disposes**; it does not describe. Every ref must reach a terminal state — deleted, or owned by a named human decision. A report line that recurs unchanged next closeout is a defect in the sweep, not a status update.
 - Preserve unrelated dirty work. Stage only files that belong to the current task.
 - In long autonomous sessions, commit at logical checkpoints (a feature lands, tests go green, a refactor completes) — not one giant commit at closeout. A session crossing hours of work with zero commits is losing recovery points.
 - Resolve conflicts and CI failures directly when local evidence, PR context, and tests make the fix bounded.
@@ -49,7 +49,7 @@ Stop and report a blocker before any network write or destructive action when:
 - The remote owner or repo authority is genuinely unknown (no profile, no remote signal) — not merely "I didn't check yet".
 - A command would force-push, rewrite shared history, or delete UNMERGED branches/content without explicit user authorization. (Deleting merged/contained branches and pruning dead worktrees is normal hygiene — see `references/decision-policy.md`.)
 - Unrelated dirty work could be swept into a commit.
-- A secret, credential file, token, generated junk, cache, or stale rescue/archive branch content would be committed.
+- A secret, credential file, token, generated junk, cache, or stale rescue/archive branch content would be committed. **Exception:** an already-encrypted secrets file (e.g. a committed `*.sops.*` / `*.env.sops`) is the repo's intended tracked state — landing a rotated ciphertext through a PR is the secret-management contract working. Verify every assignment line is `ENC[...]`-wrapped first; one plaintext value and this is a hard stop again. See `references/safety-boundaries.md` → Hard Stops.
 - Conflict resolution requires a product decision or source intent cannot be recovered.
 - External communication is required.
 
@@ -92,7 +92,7 @@ When stopped, include the repo path, branch, intended action, blocker, and the e
 4. Commit logical changes, push, open or update the PR, and watch CI when a PR exists.
 5. Address actionable review feedback and re-run checks.
 6. Merge when the `pr-owner.md` Merge Policy is satisfied; delete the head branch.
-7. Run the closeout hygiene sweep (`references/branch-hygiene.md`): prune `[gone]`/merged branches and dead worktrees; in auto-synced repos, drain any parked-branch queue the profile defines.
+7. Run the closeout hygiene sweep (`references/branch-hygiene.md`): prune `[gone]`/merged branches, **remote-only branches**, **worktree-pinned merged branches**, and dead worktrees; dispose of preservation branches via the tag ladder; sweep stale open PRs (`references/pr-owner.md`); in auto-synced repos, drain any parked-branch queue and open PRs for held infra paths.
 8. Switch back to the default GitHub identity if it was switched.
 9. Report the full ledger — committed, pushed, PR, CI, merged or why not, branches/worktrees cleaned, identity used, judgment calls made per `decision-policy.md`, and any blockers. The report must preempt "was everything pushed and merged?"
 
@@ -102,3 +102,6 @@ When stopped, include the repo path, branch, intended action, blocker, and the e
 - **A no-upstream branch with zero commits ahead of default is not stranded work.** Scratch and worktree branches trip "no upstream" constantly; check `git rev-list --count <default>..HEAD` before flagging or pushing.
 - **Enforcement layers are harness-specific.** The Stop hook fires only in Claude Code; other harnesses reach this skill via their own routing (e.g. AGENTS.md) and nothing blocks their turn-end with dirty state. The daily watchdog is the cross-harness backstop.
 - **Copy-pasted shell in references must be executed-verified.** A double-escaped sed in an earlier version of credentials.md output literal `\1` for every remote; any snippet a weaker model will run verbatim gets tested at edit time.
+- **A ref with a report path and no disposal path is permanent debt.** A sweep that acts only on refs already dead (`[gone]` upstreams, `prunable` worktrees) and *lists* every other class does not reduce debt in those classes — listing is a no-op when nothing consumes the list, and its recurrence trains the reader to skim it. Branches provably contained in default, stale worktrees, open PRs against a retired path, and held infra paths all accumulate this way while the sweep inspects them every run and reports success. When you add a class to the sweep, give it a terminal state.
+- **Local-only enumeration hides the longest-lived debt.** `git branch -vv`, `[gone]` upstreams, and `--merged` all key on local branches. A squash-merged remote branch whose `--delete-branch` half-failed has no local counterpart, so every one of those checks reports clean while it sits on the remote indefinitely. Enumerate `git branch -r` too.
+- **A worktree silently pins its branch.** Git refuses to delete a branch checked out in a worktree, and a worktree whose directory still exists is never `prunable` — so a fully merged branch held by an idle worktree is debt no step can reach. Remove the worktree first, then delete the branch; the reverse order just fails. Check worktree dirt before removing: it is the one place unique work hides — an idle worktree can hold the only copy of a file the default branch already links to.

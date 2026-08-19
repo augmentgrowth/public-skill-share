@@ -17,6 +17,13 @@ Rationale: agents chronically wait for the user to say "commit"/"merge"/"push" o
 | An automated sync process swept an in-flight edit to the default branch before its PR | Revert it on the default branch, re-land it through the intended PR with the rest of the unit, and note the guard gap in the report (propose a fix as a follow-up item, don't block on it). |
 | Local branch upstream is `[gone]` (remote merged/deleted) | Verify its commits are contained in default (`git branch --merged` / `git cherry`), then delete the local branch and prune. |
 | Worktree marked `prunable`, no dirty files | `git worktree prune` / remove it. |
+| Remote-only branch (no local counterpart) proven contained in default | Delete the remote branch. It is invisible to every local-keyed check, so nothing else will ever catch it. |
+| Worktree holding a branch that is contained in default | Remove the worktree, then delete the branch. If the worktree is dirty, adjudicate each dirty path first (`branch-hygiene.md` → Adjudicating worktree dirt); never force past it, never leave it standing because of it. |
+| `backup/*`/`archive/*`/`rescue/*` branch whose tip is already reachable from a tag on the remote | Delete the branch. The tag is the backup ref; the branch duplicates it. |
+| `backup/*`/`archive/*`/`rescue/*` branch with unique content and no tag | Tag it at the tip with a message saying what it is and why it never merged, push, verify the tag resolves on the remote at the expected SHA, then delete the branch. Tagging is what makes this non-destructive — never delete first. |
+| Open PR untouched 14+ days whose target path no longer exists on default | Close it with a comment naming the commit that retired the path and where the content lives now. Verify that preservation before closing; if the content exists nowhere else, the PR is unique work — leave it open and report. |
+| PR merged but `git ls-remote --heads origin <branch>` still shows the ref | Delete the ref explicitly. `--delete-branch` fails independently of the merge; the flag is not proof. |
+| A path an auto-sync process deliberately refuses to commit (an infra/secrets hold) sitting dirty | Branch, commit that path alone, open the PR, report the link. The hold exists to force review, so opening the PR satisfies it; do not merge it yourself. |
 | Remote agent branch fully integrated into default | Delete the remote branch. |
 | Duplicate PRs for the same feature (e.g. plan PR + impl PR) | Keep the implementation PR, close the superseded one with a comment linking to the survivor. |
 | PR scope polluted with unrelated auto-synced files | Rebuild the branch from latest default with only intended paths (per `pr-owner.md` step 7). Don't ask which files belong — the task context defines them. |

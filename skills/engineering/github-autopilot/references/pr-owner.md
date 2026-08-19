@@ -43,6 +43,14 @@ Owning a PR includes merging it. When ALL of these hold, merge without asking:
 
 Use the repo's default merge method (`gh pr merge --squash --delete-branch` unless repo settings/history show merge commits are the norm). Close superseded duplicate PRs for the same feature with a linking comment.
 
+**Verify the branch actually died.** `--delete-branch` is a local git call `gh` makes *after*
+the API merge, and it fails independently of it — most reliably when the base branch is checked
+out in another worktree, where the merge lands and the delete does not, with output that reads
+like the merge itself failed. Never treat the flag as proof. After every merge:
+`git ls-remote --heads origin <branch>` — if the ref is still there, delete it explicitly
+(`git push origin :refs/heads/<branch>`) before reporting the PR done. An unverified
+`--delete-branch` is how a merged branch becomes permanent remote debt.
+
 Note: if an old recorded preference says "push/merge only when asked", treat it as superseded by the owner's current autonomy directive — do not resurrect it from memory or old session context. Client repos still merge autonomously when the above conditions hold; the extra care there is scope/boundary verification, not a merge prompt.
 
 ## Stop Conditions
@@ -54,3 +62,43 @@ Note: if an old recorded preference says "push/merge only when asked", treat it 
 - Merge would land on a protected branch that requires an approval the bot identity cannot provide.
 
 For any other operational judgment call, apply `decision-policy.md` instead of asking.
+
+## Stale Open PR Sweep
+
+Run during the closeout hygiene sweep. `Ownership Loop` above governs the PR this session is
+working on; this governs every *other* open PR, which otherwise nobody ever looks at again.
+
+`gh pr list --state open --json number,title,headRefName,updatedAt,mergeable` — for each PR
+untouched for 14+ days, work the decision order below. It is the single authority for whether a
+PR closes; the cases it does not cover are:
+
+- **Superseded — a later PR landed the same work.** Close with a link to the survivor.
+- **Still valid, just stale.** Rebase onto default, re-run checks, and take it through the
+  normal Merge Policy. Staleness is not a reason to close work that still applies.
+- **Blocked on a human decision.** Report once, naming the specific decision, and record it per
+  `branch-hygiene.md` → *Report-once items*. Do not re-list it unchanged every closeout.
+
+Whatever the outcome, the closing comment carries the reasoning. A bare close destroys why, and
+the next session reopens the question.
+
+**Resolve every PR in this order — the first question settles it.**
+
+1. **Was the PR's target removed deliberately?** A commit that deleted or retired the path, with
+   a message or ticket saying so, is a decision that already accounts for the content. The PR is
+   superseded by that decision. Close it, citing the retiring commit. You do **not** owe a
+   surviving copy here — "deliberately deleted, and the PR predates the deletion" is itself the
+   disposition. Say that plainly in the comment.
+2. **Otherwise, where does the content survive?** Name the location — the same file on default,
+   a docs entry, another repo, an archive directory — and put it in the closing comment.
+3. **Neither holds** — the path vanished with no decision you can point to, and the content
+   exists nowhere you can find? Then the PR carries unique work. **Do not close it.** Report it
+   and record it per `branch-hygiene.md` → *Report-once items*.
+
+Uncertainty is never authority to close. If you are guessing at step 1 or 2, you are at step 3.
+
+**These two rules do not conflict — they answer different questions.** Whether to close at all
+is settled by preservation: content verified elsewhere → close; content found nowhere else →
+leave it open and report, no exceptions, uncertainty is not authority to close. Only once
+closing is on the table does the second rule apply, and it governs *close vs. merge*: closing
+is reversible, merging into a retired path is not, so a PR whose premise you cannot re-verify
+gets closed with reasoning rather than merged on optimism.
